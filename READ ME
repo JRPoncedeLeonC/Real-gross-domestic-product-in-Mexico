@@ -1,3 +1,3 @@
-The purpose of this project is to analyze the real GDP of Mexico across the years, the Mexican real GDP per capita, and the real GDP and real GDP per capita rate to see the relationship between the rates through mathematics, using R. 
+The purpose of this project is to analyze the real GDP of Mexico across the years (at constant 2013 Mexican pesos), the Mexican real GDP per capita, and the real GDP and real GDP per capita rate to see the relationship between the rates through mathematics, using R. 
 
 The beginning of this project involves pure data wrangling, so in order to see the results please head to the last pages of the pdf document. If you are intrested in the code, head to the Rmd file. Or if you want to see the data bases that I used, check the Excel files. Also, the references from where I got the data and general info are located at the end of both the Rmd and pdf file. 
