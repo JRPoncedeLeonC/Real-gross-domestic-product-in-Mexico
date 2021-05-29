@@ -1,0 +1,265 @@
+---
+title: "Real GDP per capita rate vs real GDP rate vs population"
+author: "Joaquín Rodrigo Ponce de León Conconi"
+date: "5/28/2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The purpose of this project is to analyze the real gross domestic product of Mexico, and its rate, at constant prices of 2013 (Mexican pesos), and to analyze the relationship between this variable and the real GDP per capita. The following is the wrangling and analysis process.
+
+In order to upload the datasets and to accomplish a proper analysis, we need to call the
+libraries tidyverse and readxl.
+```{r}
+library(readxl)
+library(tidyverse)
+```
+
+The file is uploaded and analyzed (The reference of the file can be viewed in the Reference
+list below).
+```{r}
+raw <- read_excel("PIBTR_2.xlsx", )
+df_raw <- as.data.frame(raw) #We change the tibble into a data frame
+head(df_raw) #Observe the first six rows
+tail(df_raw) #Observe the first six rows
+names(df_raw) #Know the column names
+str(df_raw) #Know the structure of the dataset
+```
+We see that the first row has the names "T1", "T2", "T3", "T4", "6 Meses", "9 Meses",
+and "Anual". Our aim is to get the data from the second column (__abB.1bP - Producto interno bruto), which the real gross DOMESTIC product from Mexico, and the data that is stored in "Anual" (Anual means Annual in Spanish). So, we are basically extracting the annual real GDP from different years.
+
+```{r}
+#We extract the first 2 rows
+df_raw12 <- df_raw[1:2,] 
+head(df_raw12) #Let's check how it looks
+#To make the wrangling easier, let's change the row names
+rownames(df_raw12) <- c("Season", "GDP") 
+#Let's select all the columns except the first one
+df_raw12 <- df_raw12 %>% select(-Concepto) 
+#We elongate the data set with only the real GDP 
+df_raw2_l <- gather(df_raw12[2,], key = "Period", value = "GDP") 
+df_raw2_l <- transform(df_raw2_l, GDP = as.numeric(GDP)) #We transform GDP to numeric
+head(df_raw2_l) #We see how it looks
+#We do the same for row 1
+df_raw1_l <- gather(df_raw12[1,], key = "Period", value = "Season") 
+head(df_raw1_l)
+```
+Now that we have df_raw1_l and df_raw2_l, we do the final data wrangling.
+
+```{r}
+#Both variables need to have the same structure (294 obs. of 2 variables)
+str(df_raw1_l)
+str(df_raw2_l)
+#Let's check (just to be sure) if the Period column for both variables is identical
+identical(df_raw1_l[,1], df_raw2_l[,1])
+#It is, and therefore we can make a new data frame that contains Period, GDP, and Season
+r_gdp <- cbind(df_raw2_l, df_raw1_l[,2])#We bind the columns
+colnames(r_gdp) <- c("Period", "GDP", "Season") #We set the column names
+factor(r_gdp[,3]) #We factor the third column to see if "Anual" is written in the same format
+#Now we filter the data to only include the Annual data
+r_gdp <- r_gdp %>% filter(Season=="Anual") %>% select(-Season)
+str(r_gdp)
+head(r_gdp)
+tail(r_gdp)
+#Previously we saw that the period was from 1980 to 2021, so let's change the Period column 
+Period <- 1980:2021 #We create a variable with the proper years to bind it to the dataset
+r_gdp <- r_gdp %>% select(-Period)#We select all the columns except Period
+r_gdp <- cbind(Period, r_gdp)
+head(r_gdp)
+tail(r_gdp)
+```
+We have the real gross domestic product variable, with it we can calculate real GDP per capita by uploading the total population dataset throughout the years (reference [2]).
+
+```{r}
+#We upload the population dataset and analyze it
+pop <- read_excel("tot_pop.xls") 
+str(pop)
+head(pop)
+#Let's check if Mexico appears
+pop[pop$`Country Name`=="Mexico",1]
+#Since it appears, let's save the mexican population in a variable and elongate the dataset
+pop_mex <- pop[pop$`Country Name`=="Mexico",]
+pop_mex <- pop_mex %>% select(-c(`Country Name`, `Country Code`, 
+                                 `Indicator Name`,`Indicator Code`)) %>% 
+  gather(key = "Years", value="Population", convert = T) %>%
+  as.data.frame()
+head(pop_mex)
+tail(pop_mex)
+str(pop_mex)
+```
+
+Now we have the total mexican population from 1960 to 2020. However, we need
+to know which years coincide between pop_mex and r_gdp.
+
+```{r}
+n_rgdp <- r_gdp %>% filter(Period %in% intersect(r_gdp[,"Period"],pop_mex[,"Years"]))
+n_pop_mex <- pop_mex %>% filter(Years %in% intersect(r_gdp[,"Period"],pop_mex[,"Years"]))
+str(n_rgdp)
+str(n_pop_mex)
+```
+
+Everything is set for us to compute the real GDP per capita. Therefore, we create a new data frame that includes both the population and the real GDP so that we can filter out those rows with NAs.
+
+```{r}
+#New data frame
+rgdp_pop <- cbind(n_rgdp, n_pop_mex) %>% select(-Years)
+#We check if there are any NAs in the data frame
+sum(is.na(rgdp_pop))
+#Since there is 1 NA, let's filter it out
+rgdp_pop <- rgdp_pop %>% filter(!is.na(Period) & !is.na(GDP) & !is.na(Population))
+str(rgdp_pop)
+summary(rgdp_pop)
+head(rgdp_pop)
+
+```
+It is now clear that the period that includes all the data that coincides timewise goes from 1980 to 2019. Let's make a plot of both GDP and GDP per capita.
+
+```{r}
+rgdp_pop %>% ggplot(aes(Period, GDP)) + 
+  ggtitle("Real GDP vs Years (Mex)")+
+  geom_point() + geom_line()
+```
+
+We see the real gross domestic product of Mexico, at constant prices of 2013 (Mexican pesos), has increased considerably since 1980. 
+We now need to compute the real gross internal product per capita.
+
+```{r}
+r_GDP_pc <- rgdp_pop[,"GDP"]/rgdp_pop[,"Population"] #We create a variable of the real GDP per capita
+n_rgdp_pop <- cbind(rgdp_pop, r_GDP_pc) #We create a new data frame
+head(n_rgdp_pop)
+#Let's make a plot
+n_rgdp_pop %>% ggplot(aes(Period, r_GDP_pc)) + 
+  ggtitle("Real GDP per capita vs Years (Mex)")+
+  ylab("real GDP per capita")+
+  geom_point() + geom_line()
+
+```
+
+The plot suggests that between 1981 and 1988 perhaps the real GDP was shrinking, or it was not growing as fast as the population. However, from 1989 to 2019, although it has some fluctuations, the curve increased.
+
+To answer how it is increasing, we must compute the growth rate of both real GDP and real GDP per capita using the below formula.
+
+
+$$
+r=\frac{GDP_f-GDP_i}{GDP_i}·100
+$$
+ 
+
+```{r}
+i <- 1
+f <- 2
+GDP_r <- c()#GDP rate variable
+year <- c()#year variable 
+for (j in 1:39){ 
+  v <- (n_rgdp_pop[f,"GDP"]-n_rgdp_pop[i,"GDP"])/(n_rgdp_pop[i,"GDP"])*100#We compute
+  GDP_r <- append(GDP_r, v) #We append
+  year <- append(year, n_rgdp_pop[f,"Period"]) #We append
+  i <- i+1 #This variable needs to increase by one
+  f <- f+1 #This variable needs to increase by one
+}
+GDP_ra <- cbind(GDP_r, year)
+head(GDP_ra)
+
+```
+
+Now let's do the same thing for the real GDP per capita
+
+```{r}
+i <- 1
+f <- 2
+GDPpc_r <- c()#GDP per capita rate variable
+for (j in 1:39){ 
+  v <- (n_rgdp_pop[f,"r_GDP_pc"]-n_rgdp_pop[i,"r_GDP_pc"])/(n_rgdp_pop[i,"r_GDP_pc"])*100#We compute
+  GDPpc_r <- append(GDPpc_r, v)#We append
+  i <- i+1 #This variable needs to increase by one
+  f <- f+1#This variable needs to increase by one
+}
+GDP_ra <- as.data.frame(cbind(GDP_ra, GDPpc_r))
+head(GDP_ra)
+```
+
+Let's see how the real GDP rate has evolved over time.
+```{r}
+GDP_ra %>% ggplot(aes(year, GDP_r))+
+  xlab("Years")+
+  ylab("Real GDP rate")+
+  ggtitle("Real GDP rate vs Years")+
+  geom_point()+geom_line()
+
+```
+Based on the graph, Mexico has not have a rate that suggests constant growth, meaning it fluctuates and doesn't seem to stay at constant rate. 
+```{r}
+GDP_ra %>% ggplot(aes(year, GDPpc_r))+
+  xlab("Years")+
+  ylab("Real GDP per capita rate")+
+  ggtitle("Real GDP per capita rate vs Years")+
+  geom_point()+geom_line()
+```
+
+The real GDP per capita rate has the same pattern of growth as the real GDP rate. Let's compare both graphs side by side.
+
+```{r}
+GDP_ra %>% gather(key="GDP", value = GDPpc_r, -year) %>% #We elongate the data (the column GDPpc_r has all the rates)
+  ggplot(aes(year, GDPpc_r, col=GDP))+ #x=years, y=GDPpc_r, and the color will be based on the GDP, which labels if it is real GDP rate or real GDP per capita rate
+  xlab("Years")+
+  ylab("GDP rate")+
+  ggtitle("Real GDP rate and real GDP per capita rate vs Years (Mex)")+
+  geom_point()+geom_line()
+```
+
+The real GDP per capita rate is smaller across the years than the real GDP rate. Let
+
+$$
+r_{GDPpc}=\frac{\frac{GDP_n}{N_α}-\frac{GDP_{n-1}}{N_ß}}{\frac{GDP_{n-1}}{N_ß}}·100
+$$
+
+be the real GDP per capita equation. If we start to develop the equation, we get 
+
+$$
+r_{GDPpc}=(\frac{\frac{GDP_n}{N_α}}{\frac{GDP_{n-1}}{N_ß}}-1)·100
+$$
+
+$$
+r_{GDPpc}=(\frac{N_ß}{N_α}·\frac{GDP_n}{GDP_{n-1}}-1)·100
+$$
+If Nα, which is the population of the year n, is bigger than Nß, then the solution will be smaller than that of the real GDP rate, which has the following equation:
+$$
+r_{GDPpc}=(\frac{GDP_n}{GDP_{n-1}}-1)·100
+$$
+Due to the fact that Nα>Nß the fraction gives a number smaller than zero, which implies that the product 
+
+$$
+\frac{N_ß}{N_α}·\frac{GDP_n}{GDP_{n-1}}
+$$
+to be a smaller number than 
+$$
+\frac{GDP_n}{GDP_{n-1}}
+$$
+Nα>Nß implies that the population from a year n increased with respect to the year n-1, and since the real GDP per capita rate across the years is always smaller than the real GDP rate, then the population from 1981 to 2019 only increased. Let's see if that is true:
+
+```{r}
+n_rgdp_pop %>% ggplot(aes(Period, Population))+xlim(1981, 2019)+ggtitle("Mexican population vs years")+
+  geom_point()+geom_line()
+```
+
+As we can see by the plot, the mexican population has indeed increased. 
+
+The only way for the real GDP per capita rate to be greater than the real GDP rate, is for the Mexican population to dicrease or not increase so rapidly, followed (preferably) by a significant increase in the real GDP of year n.
+
+
+REFERENCES
+
+1] Parkin, M. (2018). Economía. Twelfth Edition. Mexico: Pearson. pp 497-498.
+
+[2] www.inegi.org.mx. (n.d.). Tabulados. [online] Disponible en: https://www.inegi.org.mx/app/tabulados/default.aspx?pr=38&vr=5&in=2&tp=20&wr=1&cno=2 [Accessed 28 May 2021].
+
+[3] data.worldbank.org. (n.d.). Population, total - Mexico | Data. [online] Available at: https://data.worldbank.org/indicator/SP.POP.TOTL?view=chart&locations=MX [Accessed 28 May 2021].
+
+
+
